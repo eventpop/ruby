@@ -88,8 +88,10 @@ class PortableOpensslAT111w < PortableFormula
     ORIG
       const char *X509_get_default_cert_file(void)
       {
+          /* Compared against 0 instead of the NUL character literal: backslash
+             escapes here would be mangled by inreplace (gsub backreferences). */
           const char *jdx_cert_file = ossl_safe_getenv("JDX_RUBY_SSL_CERT_FILE");
-          if (jdx_cert_file != NULL && jdx_cert_file[0] != '\\0' && access(jdx_cert_file, R_OK) == 0)
+          if (jdx_cert_file != NULL && jdx_cert_file[0] != 0 && access(jdx_cert_file, R_OK) == 0)
               return jdx_cert_file;
           /* Auto-detect system certificate bundles */
           static const char *system_cert_files[] = {
@@ -122,7 +124,7 @@ class PortableOpensslAT111w < PortableFormula
       const char *X509_get_default_cert_dir(void)
       {
           const char *jdx_cert_dir = ossl_safe_getenv("JDX_RUBY_SSL_CERT_DIR");
-          if (jdx_cert_dir != NULL && jdx_cert_dir[0] != '\\0' && access(jdx_cert_dir, R_OK) == 0)
+          if (jdx_cert_dir != NULL && jdx_cert_dir[0] != 0 && access(jdx_cert_dir, R_OK) == 0)
               return jdx_cert_dir;
           /* Auto-detect system certificate directories */
           static const char *system_cert_dirs[] = {
