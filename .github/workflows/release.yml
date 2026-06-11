@@ -22,6 +22,9 @@ concurrency:
 env:
   HOMEBREW_DEVELOPER: 1
   HOMEBREW_NO_AUTO_UPDATE: 1
+  # Runner images lack a rootless bwrap; newer Homebrew otherwise refuses
+  # to build from source on Linux (CI runners are throwaway anyway).
+  HOMEBREW_NO_SANDBOX_LINUX: 1
 
 permissions:
   contents: read
