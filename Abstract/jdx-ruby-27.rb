@@ -277,8 +277,9 @@ class JdxRuby27 < Formula
     system testpath/"bin/bundle", "init"
     assert_match "# Object < BasicObject",
       shell_output("#{ruby} #{testpath}/bin/ri -T -f markdown Object")
-    # install gem with native components (resolves to byebug 11.x on 2.7)
-    system testpath/"bin/gem", "install", "byebug"
+    # install gem with native components; pinned because 2.7's RubyGems
+    # errors on the too-new latest byebug instead of resolving downward
+    system testpath/"bin/gem", "install", "byebug", "-v", "11.1.3"
     assert_match "byebug",
       shell_output("#{testpath}/bin/byebug --version")
 
