@@ -9,3 +9,8 @@ fi
 brew tap "jdx/$DIRNAME" .
 rm -rf "$(brew --repo)/Library/Taps/jdx/homebrew-$DIRNAME"
 ln -sf "$(pwd)" "$(brew --repo)/Library/Taps/jdx/homebrew-$DIRNAME"
+
+# Newer Homebrew (HOMEBREW_REQUIRE_TAP_TRUST) refuses to load external tap
+# commands like `brew jdx-package` from untrusted taps; older brews have no
+# `trust` command, hence the fallback.
+brew trust "jdx/$DIRNAME" || true
