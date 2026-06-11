@@ -87,6 +87,12 @@ class JdxRuby31 < Formula
     libyaml = Formula[dep_names.find{|d| d.start_with?("portable-libyaml") }]
     openssl = Formula[dep_names.find{|d| d.start_with?("portable-openssl") }]
 
+    # Keep the shipped gperf output newer than its source: regenerating
+    # props.h with gperf >= 3.1 yields size_t prototypes that conflict with
+    # 3.1's unsigned int declaration (props.kwd:40; fixed upstream in 3.2)
+    # and fail the build under modern gcc.
+    system "touch", "enc/jis/props.h"
+
     # Ruby's configure supports --with-rdoc=ri,html; request only RI data to
     # keep portable packages smaller than a full HTML documentation install.
     args = %W[
