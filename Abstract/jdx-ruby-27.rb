@@ -193,8 +193,10 @@ class JdxRuby27 < Formula
         s.gsub! ENV.cc, "cc"
         # Change e.g. `CONFIG["AR"] = "gcc-ar-11"` to `CONFIG["AR"] = "ar"`
         s.gsub!(/(CONFIG\[".+"\] = )"gcc-(.*)-\d+"/, '\\1"\\2"')
-        # C++ compiler might have been disabled because we break it with glibc@* builds
-        s.sub!(/(CONFIG\["CXX"\] = )"false"/, '\\1"c++"') if build.without? "yjit"
+        # C++ compiler might have been disabled because we break it with glibc@* builds.
+        # Unlike 3.x, 2.7's configure can keep a working C++ here, so don't
+        # treat a no-op replacement as an inreplace failure.
+        s.gsub!(/(CONFIG\["CXX"\] = )"false"/, '\\1"c++"', audit_result: false) if build.without? "yjit"
       end
     end
 
@@ -286,8 +288,9 @@ class JdxRuby27 < Formula
     # Test gems that require portable dependency headers
     # These were failing before we included headers in the tarball
     # See: https://github.com/jdx/mise/discussions/7268#discussioncomment-15298593
-    # openssl gem 3.1.x is the newest line supporting ruby 2.7 + OpenSSL 1.1.1
-    system testpath/"bin/gem", "install", "openssl", "-v", "~> 3.1.0"
+    # No `gem install openssl` here: gem 3.1's legacy OpenSSL 1.1 paths
+    # misdetect against the macOS runner's preinstalled openssl@3 headers;
+    # the stdlib openssl ext is already exercised above.
     system testpath/"bin/gem", "install", "psych"    # requires libyaml headers
 
     super
