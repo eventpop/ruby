@@ -129,7 +129,9 @@ class JdxRuby27 < Formula
     ENV["cxxflags"] = ENV.delete("CXXFLAGS")
 
     system "./configure", *args
-    system "make", "extract-gems"
+    # No `make extract-gems` here: 2.7's target runs via RUNRUBY (./miniruby,
+    # which does not exist before `make`), and 2.7's rbinstall installs bundled
+    # gems from gems/*.gem directly, so extraction is unnecessary.
     system "make"
 
     # Add a helper load path file so bundled gems can be easily used (used by brew's standalone/init.rb)

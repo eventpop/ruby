@@ -45,9 +45,13 @@ module Homebrew
           name_flags << "--HEAD" unless name.include?("@")
 
           begin
-            # Install build deps (but not static-linked deps) from bottles, to save compilation time.
-            # Avoid source-building Linux helper formulae that do not affect portable Ruby linkage.
-            bottled_dep_allowlist = /\A(?:glibc@|linux-headers@|ruby@|python@|rustup|autoconf|pkgconf|bison|bzip2|unzip)/
+            # Build only this tap's portable-* formulae from source (their outputs
+            # are statically linked into Ruby; `brew linkage` verifies nothing else
+            # leaks in) and install every other dependency from bottles. Helper and
+            # toolchain formulae must not be source-built under Homebrew 6: once its
+            # glibc bottle is poured, gmp's configure cannot run its compiled test
+            # programs and the whole toolchain chain fails.
+            portable_dep = ->(name) { File.basename(name).start_with?("portable-") }
             deps = Dependency.expand(Formula[name], cache_key: "jdx-package-#{name}") do |_dependent, dep|
               next Dependable::PRUNE if dep.test? || dep.optional?
               next Dependable::PRUNE if dep.name == "rustup" && args.without_yjit?
@@ -55,12 +59,12 @@ module Homebrew
                 next Dependable::PRUNE
               end
 
-              next unless bottled_dep_allowlist.match?(dep.name)
+              next if portable_dep.call(dep.name)
 
               Dependable::KEEP_BUT_PRUNE_RECURSIVE_DEPS
             end.map(&:name)
 
-            bottled_deps, deps = deps.partition { |dep| bottled_dep_allowlist.match?(dep) }
+            bottled_deps, deps = deps.partition { |dep| !portable_dep.call(dep) }
             puts "Bottled deps: #{bottled_deps.inspect}"
             puts "Other deps: #{deps.inspect}"
 
