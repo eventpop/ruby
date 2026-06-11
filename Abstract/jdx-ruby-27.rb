@@ -269,6 +269,11 @@ class JdxRuby27 < Formula
       require "fiddle"
     EOS
     system testpath/"bin/gem", "environment"
+    # Homebrew's vendored bundler leaks BUNDLER_VERSION (4.x) into the test
+    # environment; 2.7's RubyGems honors it in find_spec_for_exe and aborts,
+    # since bundler 4 does not support ruby 2.7 (3.x RubyGems doesn't use
+    # this code path).
+    ENV.delete "BUNDLER_VERSION"
     system testpath/"bin/bundle", "init"
     assert_match "# Object < BasicObject",
       shell_output("#{ruby} #{testpath}/bin/ri -T -f markdown Object")
