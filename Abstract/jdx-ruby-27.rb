@@ -61,12 +61,20 @@ class JdxRuby27 < Formula
     libyaml = Formula[dep_names.find{|d| d.start_with?("portable-libyaml") }]
     openssl = Formula[dep_names.find{|d| d.start_with?("portable-openssl") }]
 
+    # Keep the shipped gperf output newer than its source: regenerating
+    # props.h with gperf >= 3.1 yields size_t prototypes that conflict with
+    # 2.7's unsigned int declaration and fail the build under modern gcc.
+    system "touch", "enc/jis/props.h"
+
     # Ruby's configure supports --with-rdoc=ri,html; request only RI data to
     # keep portable packages smaller than a full HTML documentation install.
+    # dbm/gdbm (stdlib until 3.0) are excluded: their extconfs link whatever
+    # libgdbm is lying around (e.g. the Homebrew bottle installed as a helper
+    # dep), which fails the portable linkage check.
     args = %W[
       --prefix=#{prefix}
       --enable-load-relative
-      --with-out-ext=win32,win32ole
+      --with-out-ext=win32,win32ole,dbm,gdbm
       --without-gmp
       --with-rdoc=ri
       --disable-dependency-tracking
