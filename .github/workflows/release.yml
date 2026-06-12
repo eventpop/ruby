@@ -22,12 +22,14 @@ concurrency:
 env:
   HOMEBREW_DEVELOPER: 1
   HOMEBREW_NO_AUTO_UPDATE: 1
+  # Runner images lack a rootless bwrap; newer Homebrew otherwise refuses
+  # to build from source on Linux (CI runners are throwaway anyway).
+  HOMEBREW_NO_SANDBOX_LINUX: 1
 
 permissions:
   contents: read
   id-token: write
   attestations: write
-  actions: read  # For SLSA provenance
 
 jobs:
   build:
@@ -35,15 +37,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Linux runners must satisfy Homebrew 6's glibc baseline (2.39,
+          # i.e. ubuntu-24.04) from the host: on older hosts every bottle
+          # pour drags in Homebrew's own glibc + gcc, and the resulting
+          # ruby links .linuxbrew/glibc, failing the portability check.
           - runner: macos-14
             yjit: true
-          - runner: ubuntu-22.04
+          - runner: ubuntu-24.04
             yjit: true
-          - runner: ubuntu-22.04
+          - runner: ubuntu-24.04
             yjit: false
-          - runner: ubuntu-22.04-arm
+          - runner: ubuntu-24.04-arm
             yjit: true
-          - runner: ubuntu-22.04-arm
+          - runner: ubuntu-24.04-arm
             yjit: false
     runs-on: ${{ matrix.runner }}
     steps:
@@ -131,25 +137,6 @@ jobs:
         with:
           name: ruby-${{ inputs.version }}-${{ matrix.runner }}-yjit-${{ matrix.yjit }}
           path: rubies/
-
-  combine-hashes:
-    needs: build
-    runs-on: ubuntu-latest
-    outputs:
-      hashes: ${{ steps.combine.outputs.hashes }}
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          pattern: ruby-${{ inputs.version }}-*
-          path: rubies
-          merge-multiple: true
-
-      - name: Combine hashes
-        id: combine
-        working-directory: rubies
-        run: |
-          echo "hashes=$(sha256sum *.tar.gz | base64 -w0)" >> "$GITHUB_OUTPUT"
 
   create-release:
     needs: build
@@ -279,23 +266,8 @@ jobs:
             --latest=false \
             $prerelease_flag
 
-  provenance:
-    needs: [combine-hashes, create-release]
-    permissions:
-      actions: read
-      id-token: write
-      contents: write
-    # Keep this pinned to a release tag, not a commit SHA.
-    # The SLSA workflow downloads its builder from a tag-based release when
-    # `compile-generator: false`, and raw SHA refs break that resolution.
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      base64-subjects: "${{ needs.combine-hashes.outputs.hashes }}"
-      upload-assets: false
-      provenance-name: "ruby-${{ inputs.version }}.intoto.jsonl"
-
   upload-assets:
-    needs: [build, create-release, provenance]
+    needs: [build, create-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -320,27 +292,16 @@ jobs:
           gh release upload "${VERSION}" *.tar.gz --clobber --repo "${{ github.repository }}"
           gh release upload "${REVISION_TAG}" *.tar.gz --clobber --repo "${{ github.repository }}"
 
-      - name: Download SLSA provenance
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: "ruby-${{ inputs.version }}.intoto.jsonl"
-          path: provenance
-
-      - name: Upload SLSA provenance to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-          REVISION_TAG: ${{ needs.create-release.outputs.revision_tag }}
-        run: |
-          gh release upload "${VERSION}" provenance/*.intoto.jsonl --clobber --repo "${{ github.repository }}"
-          gh release upload "${REVISION_TAG}" provenance/*.intoto.jsonl --clobber --repo "${{ github.repository }}"
-
       - name: Attest build provenance
+        # Attestation is advisory (mise skips verification for custom
+        # precompiled_url templates); never block the release on it.
+        continue-on-error: true
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-path: 'rubies/*.tar.gz'
 
   publish-release:
-    needs: [create-release, provenance, upload-assets]
+    needs: [create-release, upload-assets]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -368,31 +329,3 @@ jobs:
 
           # Publish pinned revision release
           gh release edit "${REVISION_TAG}" --draft=false --latest=false $prerelease_flag --repo "${{ github.repository }}"
-
-  notify:
-    needs: [build, combine-hashes, create-release, provenance, upload-assets, publish-release]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Send email via Resend
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          REVISION_TAG="${{ needs.create-release.outputs.revision_tag }}"
-          if [[ "${{ needs.publish-release.result }}" == "success" ]]; then
-            subject="✅ Ruby ${VERSION} released successfully (${REVISION_TAG})"
-            body="<p>Ruby ${VERSION} has been released successfully (build ${REVISION_TAG}).</p><p><a href='https://github.com/${{ github.repository }}/releases/tag/${VERSION}'>View Release</a> | <a href='https://github.com/${{ github.repository }}/releases/tag/${REVISION_TAG}'>View Revision</a></p>"
-          else
-            subject="❌ Ruby ${VERSION} release failed"
-            body="<p>Ruby ${VERSION} release failed.</p><p><a href='https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'>View Workflow Run</a></p>"
-          fi
-          curl -X POST 'https://api.resend.com/emails' \
-            -H "Authorization: Bearer ${RESEND_API_KEY}" \
-            -H 'Content-Type: application/json' \
-            -d "{
-              \"from\": \"Ruby Releases <ruby@en.dev>\",
-              \"to\": [\"${{ secrets.NOTIFY_EMAIL }}\"],
-              \"subject\": \"${subject}\",
-              \"html\": \"${body}\"
-            }"
