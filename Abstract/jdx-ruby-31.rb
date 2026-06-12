@@ -113,7 +113,7 @@ class JdxRuby31 < Formula
         odie "HOMEBREW_BASERUBY must contain the path to a ruby #{version} executable"
       end
 
-      baseruby_version = baseruby && %x[#{baseruby} -v]
+      baseruby_version = baseruby && Utils.safe_popen_read(baseruby, "-v")
       if baseruby_version =~ /#{Regexp.escape(version)}/
         args += %W[--with-baseruby=#{baseruby}]
       else

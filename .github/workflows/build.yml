@@ -18,21 +18,28 @@ permissions:
 env:
   HOMEBREW_DEVELOPER: 1
   HOMEBREW_NO_AUTO_UPDATE: 1
+  # Runner images lack a rootless bwrap; newer Homebrew otherwise refuses
+  # to build from source on Linux (CI runners are throwaway anyway).
+  HOMEBREW_NO_SANDBOX_LINUX: 1
 
 jobs:
   build:
     strategy:
       matrix:
         include:
+          # Linux runners must satisfy Homebrew 6's glibc baseline (2.39,
+          # i.e. ubuntu-24.04) from the host: on older hosts every bottle
+          # pour drags in Homebrew's own glibc + gcc, and the resulting
+          # ruby links .linuxbrew/glibc, failing the portability check.
           - runner: macos-14
             yjit: true
-          - runner: ubuntu-22.04
+          - runner: ubuntu-24.04
             yjit: true
-          - runner: ubuntu-22.04
+          - runner: ubuntu-24.04
             yjit: false
-          - runner: ubuntu-22.04-arm
+          - runner: ubuntu-24.04-arm
             yjit: true
-          - runner: ubuntu-22.04-arm
+          - runner: ubuntu-24.04-arm
             yjit: false
       fail-fast: false
     runs-on: ${{ matrix.runner }}
